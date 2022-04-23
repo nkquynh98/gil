@@ -1,0 +1,88 @@
+# Rules:
+#   - all coordinates are as format [x, y]
+#   - 'world' is always the root of the workspace
+#   - geometry data is defined based on type, e.g. box has dim [1, 1], circle has radius [0.2]
+#   - color is as format rgba
+# TODO: maybe implement x, y, phi kinematic later if needed
+workspace:
+  name: 'prepare_meal'
+  tree:
+    world:
+      origin: [0., 0.]
+      geometry: 
+        dim: [5., 5.]
+      property:
+        type_obj: 'env'
+        color: [1, 1, 1, 1]
+        movable: False
+      children:
+        - human1:
+            origin: [-0.6, 0.5]
+            geometry:
+              radius: 0.2
+            property:
+              type_obj: 'human'
+              color: [0, 0, 1, 1]
+              movable: True
+            children:
+        - human2:
+            origin: [0.6, 0.5]
+            geometry:
+              radius: 0.2
+            property:
+              type_obj: 'human'
+              color: [0, 0.5, 0.5, 1]
+              movable: True
+            children:
+        - robot:
+            origin: [0., -1.2]
+            geometry:
+              radius: 0.1
+            property:
+              type_obj: 'robot'
+              color: [0, 1, 0, 1]
+              movable: True
+            children:
+        - table:
+            origin: [0., -1.5]
+            geometry: 
+              dim: [1., 1.]
+            property:
+              type_obj: 'box_obj'
+              color: [1, 0.8, 0.6, 0.5]
+              movable: False
+            children:
+        - shelf1:
+            origin: [-1., 1.5]
+            geometry:
+              dim: [0.5, 0.5]
+            property:
+              type_obj: 'box_obj'
+              color: [1, 0.8, 0.6, 0.5]
+              movable: False
+            children:
+              - disk:
+                  origin: [0.1, 0.1]
+                  geometry: {}
+                  property:
+                    type_obj: 'point_obj'
+                    color: [0, 1, 1, 0.9]
+                    movable: True
+                  children:
+        - shelf2:
+            origin: [1., 1.5]
+            geometry:
+              dim: [0.5, 0.5]
+            property:
+              type_obj: 'box_obj'
+              color: [1, 0.8, 0.6, 0.5]
+              movable: False
+            children:
+              - cup:
+                  origin: [0.1, 0.1]
+                  geometry: {}
+                  property:
+                    type_obj: 'point_obj'
+                    color: [0, 1, 1, 0.9]
+                    movable: True
+                  children:
