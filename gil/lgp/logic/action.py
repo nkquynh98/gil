@@ -1,7 +1,7 @@
 import itertools
 
 from gil.lgp.utils.helpers import frozenset_of_tuples
-
+from pyrieef.motion.trajectory import Trajectory
 
 class Action:
     '''
@@ -165,4 +165,46 @@ class DurativeAction(Action):
                '\n  end_del_effects: ' + str([list(i) for i in self.end_del_effects]) + '\n'
     
 
+    def set_from_dict(self, dict: dict):
+        self.name = dict["name"]
+        self.parameters = dict["parameters"]
+        self.duration = dict["duration"]
+        
+        self.positive_preconditions = frozenset_of_tuples(dict["positive_preconditions"])
+        self.negative_preconditions = frozenset_of_tuples(dict["negative_preconditions"])
+        self.add_effects = frozenset_of_tuples(dict["add_effects"])
+        self.del_effects = frozenset_of_tuples(dict["del_effects"])
+        traj_x = dict["trajectory"]["x"]
+        self.trajectory = Trajectory(q_init=traj_x[0:2], x=traj_x[2:])
+
+        
+    def get_traj_dict(self):
+        return_traj = {}
+        return_traj["n"]=self.trajectory.n()
+        return_traj["T"]=self.trajectory.T()
+        return_traj["x"]=self.trajectory.x()
+        return return_traj
+        
+    def get_dict(self, get_full=False):
+        return_dict = {}
+        return_dict["name"] = self.name
+        return_dict["type"] = "durative-action"
+        return_dict["parameters"] = self.parameters
+        return_dict["duration"] = self.duration
+
+        return_dict["positive_preconditions"] = [list(i) for i in self.positive_preconditions]
+        return_dict["negative_preconditions"] = [list(i) for i in self.negative_preconditions]
+        return_dict["add_effects"] = [list(i) for i in self.add_effects]
+        return_dict["del_effects"] = [list(i) for i in self.del_effects]
+        if get_full:
+            return_dict["start_positive_preconditions"]=[list(i) for i in self.start_positive_preconditions]
+            return_dict["start_negative_preconditions"]=[list(i) for i in self.start_negative_preconditions]
+            return_dict["end_positive_preconditions"]=[list(i) for i in self.end_positive_preconditions]
+            return_dict["end_negative_preconditions"]=[list(i) for i in self.end_negative_preconditions]
+            return_dict["start_add_effects"]=[list(i) for i in self.start_add_effects]
+            return_dict["start_del_effects"]=[list(i) for i in self.start_del_effects]
+            return_dict["end_add_effects"]=[list(i) for i in self.end_add_effects]
+            return_dict["end_del_effects"]=[list(i) for i in self.end_del_effects]
+        #return_dict["trajectory"] = self.get_traj_dict()
+        return return_dict
         

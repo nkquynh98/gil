@@ -9,38 +9,38 @@ from datetime import datetime
 from gil.lgp.logic.problem import Problem
 from gil.lgp.utils.helpers import frozenset_of_tuples
 from gil.lgp.core.dynamic import HumoroDynamicLGP
-
+from gil.engine.HumoroLGPEnv import EnvHumoroLGP
+from gil.lgp.experiment.pipeline import Experiment
 _path_file = dirname(realpath(__file__))
 _domain_dir = join(_path_file, '../../../data', 'scenarios')
 _dataset_dir = join(_path_file, '../../../datasets', 'mogaze')
 _data_dir = join(_path_file, '../../../data', 'experiments')
+_figure_dir = join(_path_file, '../../data', 'figures')
 _model_dir = join(expanduser("~"), '.qibullet', '1.4.3')
 robot_model_file = join(_model_dir, 'pepper.urdf')
 
 
-class Experiment(object):
+class GILDatasetGenerator(object):
 
     logger = logging.getLogger(__name__)
     def __init__(self, **kwargs):
+        self.dataset_name = kwargs.get("dataset_name", "default")
         self.verbose = kwargs.get('verbose', False)
         self.task = kwargs.get('task', 'set_table')
-        domain_file = kwargs.get('domain_file', join(_domain_dir, 'domain_' + self.task + '.pddl'))
-        robot_model_file= kwargs.get('robot_model_file', join(_model_dir, 'pepper.urdf'))
-        mogaze_dir = kwargs.get('mogaze_dir', _dataset_dir)
         self.data_dir = kwargs.get('data_dir', _data_dir)
         self.data_name = join(self.data_dir, self.task + str(datetime.now()))
         os.makedirs(self.data_dir, exist_ok=True)
         sim_fps = kwargs.get('sim_fps', 120)
         self.prediction = kwargs.get('prediction', False)
-        self.engine = HumoroDynamicLGP(domain_file=domain_file, robot_model_file=robot_model_file, path_to_mogaze=mogaze_dir, 
-                                       sim_fps=sim_fps, prediction=self.prediction, verbose=self.verbose, enable_viewer=True)
+        self.engine = EnvHumoroLGP(env_name=self.dataset_name,sim_fps=sim_fps, prediction=self.prediction, verbose=self.verbose, enable_viewer=True)
         # experiment params
         self.test_segments = kwargs.get('test_segments', None)  # test segments takes precedent
         self.total_pnp = kwargs.get('total_pnp', [4, 5, 6, 7])
         self.taskid = kwargs.get('taskid', [2, 3])  # set table for 2, 3 people
-        self.human_carry = kwargs.get('human_carry', 3)
+        self.human_carry = kwargs.get('human_carry', 1)
         self.trigger_period = kwargs.get('trigger_period', 10)
         self.start_agent_symbols = frozenset([('agent-avoid-human',), ('agent-free',)])
+        #self.start_agent_symbols = frozenset([('agent-free',)])
         self.end_agent_symbols = frozenset([('agent-at', 'table')])
         self.get_segments()
         # experiment storing
@@ -49,7 +49,7 @@ class Experiment(object):
     def get_segments(self):
         task_overlap = []
         self.segments = {}
-        
+        print("getting segments")
         domain = self.engine.humoro_lgp.logic_planner.domain
         if self.test_segments is None:
             for i in self.taskid:
@@ -65,8 +65,11 @@ class Experiment(object):
                         task_objects = set(objects)
                         task_overlap.append(len(human_objects.intersection(task_objects)) / len(human_objects.union(task_objects)))
                     if n_carries in self.total_pnp:
-                        self.segments[segment] = Experiment.get_problem_from_segment(self.engine.hr, segment, domain, objects,
+                        problem = GILDatasetGenerator.get_problem_from_segment(self.engine.hr, segment, domain, objects,
                                                                                     self.start_agent_symbols, self.end_agent_symbols)
+                        #print("object",objects)
+                        #print("problem", problem)
+                        self.segments[segment] = problem
         else:
             for segment in self.test_segments:
                 objects = self.engine.hr.get_object_carries(segment, predicting=False)
@@ -76,40 +79,55 @@ class Experiment(object):
                     human_objects = set(self.engine.hr.get_object_carries(segment, predicting=True))
                     task_objects = set(objects)
                     task_overlap.append(len(human_objects.intersection(task_objects)) / len(human_objects.union(task_objects)))
-                self.segments[segment] = Experiment.get_problem_from_segment(self.engine.hr, segment, domain, objects,
+                self.segments[segment] = GILDatasetGenerator.get_problem_from_segment(self.engine.hr, segment, domain, objects,
                                                                              self.start_agent_symbols, self.end_agent_symbols)
         Experiment.logger.info(f'Task IoU ratio: {np.mean(task_overlap)} +- {np.std(task_overlap)}')
     
     def save_data(self):
         with open(self.data_name, 'wb') as f:
             pickle.dump(self.segment_data, f)
-    
-    def run(self):
-
+    def run_without_human(self):
+        pass
+    def run(self, gather_data=False):
         for segment, problem in self.segments.items():
             # single plan
             print("segment", segment)
             print("problem", problem)
             self.engine.init_planner(segment=segment, problem=problem, 
                                      human_carry=self.human_carry, trigger_period=self.trigger_period,
-                                     human_freq='human-at', traj_init='outer')
+                                     human_freq='human-at', traj_init='outer', save_training_data=gather_data, data_tag="single_plan")
             single_success = self.engine.run(replan=False, sleep=False)
             # dynamic plan
             self.engine.init_planner(segment=segment, problem=problem, 
                                      human_carry=self.human_carry, trigger_period=self.trigger_period,
-                                     human_freq='once', traj_init='nearest')
+                                     human_freq='once', traj_init='nearest',save_training_data=gather_data, data_tag="dynamic_plan")
             dynamic_success = self.engine.run(replan=True, sleep=False)
             data = self.engine.get_experiment_data()
             data['single_success'] = single_success
             data['dynamic_success'] = dynamic_success
             self.segment_data[segment] = data
             self.engine.reset_experiment()
-
+    def run_with_gil(self, json_config_file: str, save_fig = False, tag = ""):
+        self.engine.load_trained_network(json_config_file)
+        for segment, problem in self.segments.items():
+            self.engine.init_planner(segment=segment, problem=problem, 
+                            human_carry=self.human_carry, trigger_period=self.trigger_period,
+                            human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")
+            self.engine.run_gil()
+            self.engine.init_planner(segment=segment, problem=problem, 
+                                human_carry=self.human_carry, trigger_period=self.trigger_period,
+                                human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")            
+            single_success = self.engine.run(replan=False, sleep=False)
+            if save_fig:
+                file_name = join(_figure_dir,self.dataset_name+"_"+problem.name+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))+ tag + ".png")
+                self.engine.draw_real_path(human=True,gil=True, planned=True, save_file=file_name)
     @staticmethod
     def get_problem_from_segment(hr, segment, domain, objects, start_agent_symbols, end_agent_symbols):
         '''
         Infer problem from dataset, human prediction can differ from the goal here, which the robot has to adapt to solve this problem
         '''
+        print("segment", segment)
+    
         init_pred = hr.get_object_predicates(segment, 0, predicting=False)
         init_pred = [p for p in init_pred if p[1] in objects]
         # print("init pred", init_pred)
@@ -139,4 +157,4 @@ class Experiment(object):
         problem.negative_goals = [frozenset()]
         return problem
 
-        
+    

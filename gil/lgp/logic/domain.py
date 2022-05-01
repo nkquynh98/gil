@@ -26,6 +26,10 @@ class Domain(object):
                 grounded_actions.append(act)
         return grounded_actions
 
+    def ground_single_action(self, action_name, objects):
+        
+        for action in self.actions[action_name].groundify(objects, self.types):
+            return action
     def __str__(self):
         return 'Domain name: ' + self.name + \
                '\nRequirements: ' + str(self.requirements) + \
@@ -34,3 +38,13 @@ class Domain(object):
                '\nPredicates: ' + str(self.predicates) + \
                '\nFunctions: ' + str(self.functions) + \
                '\nActions: ' + str([str(a) for a in self.actions]) + '\n'
+    def get_dict(self):
+        return_dict = {}
+        return_dict["domain_name"]=self.name
+        return_dict["requirements"]=self.requirements
+        return_dict["types"]=self.types
+        return_dict["constants"]=self.constants
+        return_dict["predicates"]=self.predicates
+        return_dict["functions"]=self.functions
+        return_dict["actions"]=[a.get_dict() for a in self.actions.values()]
+        return return_dict

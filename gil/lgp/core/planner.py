@@ -372,7 +372,6 @@ class HumoroLGP(LGP):
             if plan is None:
                 return None, None
         prev_pivot = self.workspace.get_robot_geometric_state()
-        print("Prev Pivot", prev_pivot)
         waypoints = [(prev_pivot, 0)]
         waypoint_manifolds = []
         t = -self.symbolic_elapsed_t

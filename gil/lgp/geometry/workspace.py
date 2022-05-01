@@ -9,7 +9,7 @@ matplotlib.rcParams['ps.fonttype'] = 42
 from collections import deque
 from pyrieef.geometry.pixel_map import PixelMap
 from pyrieef.geometry.workspace import Circle, Workspace
-
+import math
 from gil.lgp.geometry.kinematics import OBJECT_MAP, EnvBox
 from gil.lgp.geometry.transform import LinearTranslation
 from gil.lgp.utils.helpers import DRAW_MAP, frozenset_of_tuples, draw_trajectory
@@ -199,7 +199,6 @@ class YamlWorkspace(LGPWorkspace):
         self._geometric_state = {}
         fringe = deque()
         fringe.append(YamlWorkspace.GLOBAL_FRAME)
-        print("geo", self._geometric_state)
         while fringe:
             frame = fringe.popleft()
             self._geometric_state[frame] = self.get_global_coordinate(frame)
@@ -270,9 +269,9 @@ class HumoroWorkspace(YamlWorkspace):
         self.robot_model_file = kwargs.get('robot_model_file', 'data/models/cube.urdf')
         self.robot_frame = list(self.robots.keys())[0]   # for now only support one robot
         self.hr = hr
+        self.obstacles_pybullet = {}
         self._symbolic_state = frozenset()
         self.robot_spawned = False
-        print("box extent", self.box.box_extent())
 
     def set_parameters(self, **kwargs):
         self.segment = kwargs.get('segment')
@@ -323,7 +322,60 @@ class HumoroWorkspace(YamlWorkspace):
         for n in list(self.kin_tree.nodes()):
             if n != self.robot_frame and n != YamlWorkspace.GLOBAL_FRAME:
                 self.kin_tree.remove_node(n)
+    def get_lidar_result2D(self, numRays: int, height=0.2, rayMin=0.16, rayLen = 13):
 
+        """Get 2D Lidar scan result:
+            Input: 
+                body: The body that Lidar is attached to
+                numRays: number of Rays
+                rayMin: The minimum scan distance
+                rayLen: The maximum scan distance
+                height: The height of the Lidar
+                
+            Output:
+                np.array of length 2*numRays
+        """
+        rayFrom = []
+        rayTo = []
+        lidar_pose = p.getBasePositionAndOrientation(self.hr.p._robots[self.robot_frame])[0]
+        result = np.zeros((numRays))
+        #print("Current body id", self._bodies_idx[body])
+        
+        for i in range(numRays):
+
+            rayFrom.append([
+                lidar_pose[0]+rayMin * math.sin(2. * math.pi * float(i) / numRays),
+                lidar_pose[0]+rayMin * math.cos(2. * math.pi * float(i) / numRays), height
+            ])
+            rayTo.append([
+                rayLen * math.sin(2. * math.pi * float(i) / numRays),
+                rayLen * math.cos(2. * math.pi * float(i) / numRays), height
+            ])
+
+        scan_results =  p.rayTestBatch(rayFrom, rayTo)
+        for i in range(numRays):
+            hitObjectUid = scan_results[i][0]
+            if hitObjectUid>=0:
+                x_coor= round(scan_results[i][3][0],3)
+                y_coor= round(scan_results[i][3][1],3)
+                result[i]=np.linalg.norm(x_coor+y_coor)
+        return result
+
+    def create_cyclinder_pybullet(self, name, collision = True, visible = True, color=[.8, .8, .8, 1.], height=1, radius=0.05, basePosition=[0, 1, 0], baseOrientation=[0, 0, 0, 1]):
+        p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
+        if visible:
+            visualShapeId = p.createVisualShape(shapeType=p.GEOM_CYLINDER, length=height, rgbaColor=color, specularColor=[1, 1, 1], radius=radius)
+        else:
+            visualShapeId = p.createVisualShape(shapeType=p.GEOM_CYLINDER, length=0.001, rgbaColor=color, specularColor=[1, 1, 1], radius=0.001)
+        
+        if collision == True:
+            cuid = p.createCollisionShape(shapeType=p.GEOM_CYLINDER, height=height, radius=radius)
+        else:
+            cuid = -1  # p.createCollisionShape(p.GEOM_BOX, halfExtents = [1, 1, 1])
+        bodyid = p.createMultiBody(baseMass=1, baseCollisionShapeIndex=cuid, baseInertialFramePosition=[0, 0, 0], baseVisualShapeIndex=visualShapeId,
+            basePosition=basePosition, baseOrientation=baseOrientation, useMaximalCoordinates=True)
+        self.obstacles_pybullet[name] = bodyid
+        p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
     def initialize_workspace_from_humoro(self, **kwargs):
         '''
         Initialize workspace using interface from humoro
@@ -343,7 +395,7 @@ class HumoroWorkspace(YamlWorkspace):
             self.kin_tree.add_node('chair' + str(i), link_obj=link_obj, type_obj='box_obj', movable=False, color=[1., .5, .25, 1.])
             self.kin_tree.add_edge(global_frame, 'chair'+ str(i))
             self.obstacles['chair' + str(i)] = Circle(origin=np.array(pos[:2]), radius=0.25)
-            
+            self.create_cyclinder_pybullet('chair' + str(i), visible=False, basePosition=pos, radius=0.25)
         # table
         pos, _ = p.getBasePositionAndOrientation(self.hr.p._objects['table'])
         link_obj = OBJECT_MAP['box_obj'](origin=np.array(pos[:2]), dim=np.array([.8, .8]))
@@ -352,6 +404,7 @@ class HumoroWorkspace(YamlWorkspace):
         self.kin_tree.add_node('table', link_obj=link_obj, area=area, limit=limit, type_obj='box_obj', movable=False, color=[1., .5, .25, 1.])
         self.kin_tree.add_edge(global_frame, 'table')
         self.obstacles['table'] = Circle(origin=np.array(pos[:2]), radius=0.8)
+        self.create_cyclinder_pybullet("table", visible=False, basePosition=pos, radius=0.8)
         # small_shelf
         pos, _ = p.getBasePositionAndOrientation(self.hr.p._objects['vesken_shelf'])
         link_obj = OBJECT_MAP['box_obj'](origin=np.array(pos[:2]), dim=np.array([.36, .22]))
@@ -360,6 +413,7 @@ class HumoroWorkspace(YamlWorkspace):
         self.kin_tree.add_node('small_shelf', link_obj=link_obj, area=area, limit=limit, type_obj='box_obj', movable=False, color=[1., .5, .25, 1.])
         self.kin_tree.add_edge(global_frame, 'small_shelf')
         self.obstacles['small_shelf'] = Circle(origin=np.array(pos[:2]), radius=0.4)
+        self.create_cyclinder_pybullet("small_shelf", visible=False, basePosition=pos, radius=0.4)
         # big_shelf
         pos, _ = p.getBasePositionAndOrientation(self.hr.p._objects['laiva_shelf'])
         link_obj = OBJECT_MAP['box_obj'](origin=np.array(pos[:2]), dim=np.array([.24, .59]))
@@ -368,6 +422,7 @@ class HumoroWorkspace(YamlWorkspace):
         self.kin_tree.add_node('big_shelf', link_obj=link_obj, area=area, limit=limit, type_obj='box_obj', movable=False, color=[1., .5, .25, 1.])
         self.kin_tree.add_edge(global_frame, 'big_shelf')
         self.obstacles['big_shelf'] = Circle(origin=np.array(pos[:2]), radius=0.5)
+        self.create_cyclinder_pybullet("small_shelf", visible=False, basePosition=pos, radius=0.5)
         self.locations = set(['table', 'small_shelf', 'big_shelf'])
         self.update_geometric_state()
         # objects
@@ -399,7 +454,7 @@ class HumoroWorkspace(YamlWorkspace):
             self.hr.p.spawnRobot(self.robot_frame, urdf=self.robot_model_file)
             self.robot_spawned = True
         p.resetBasePositionAndOrientation(self.hr.p._robots[self.robot_frame], [*self.get_robot_geometric_state(), 0], [0, 0, 0, 1])
-
+    
     def update_workspace(self, t):
         '''
         Update workspace with human pos and movable objects (for now all are global coordinate)

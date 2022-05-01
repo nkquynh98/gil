@@ -18,3 +18,13 @@ class Problem(object):
                '\nInit state: ' + str([list(i) for i in self.state]) + \
                '\nPositive goals: ' + str([list(i) for i in self.positive_goals]) + \
                '\nNegative goals: ' + str([list(i) for i in self.negative_goals]) + '\n'
+
+    def get_dict(self):
+        dict = {}
+        dict["problem_name"] = self.name
+        dict["domain_name"] = self.domain_name
+        dict["objects"] = self.objects
+        dict["init_state"] = [list(i) for i in self.state]
+        dict["positive_goal"] = [list(i) for i in self.positive_goals]
+        dict["negative_goal"] = [list(i) for i in self.negative_goals]
+        return dict

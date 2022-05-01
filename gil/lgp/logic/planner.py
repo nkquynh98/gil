@@ -15,7 +15,7 @@ class LogicPlanner(object):
 
     def __init__(self, domain):
         self.domain = domain
-        self.cache_path = os.path.join(_path_file, '../../data/caches')
+        self.cache_path = os.path.join(_path_file, '../../../data/caches')
         os.makedirs(self.cache_path, exist_ok=True)
     
     def init_planner(self, **kwargs):

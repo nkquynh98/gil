@@ -17,6 +17,8 @@ ROOT_DIR = join(dirname(abspath(__file__)), '..')
 DATA_DIR = join(ROOT_DIR, 'data', 'scenarios')
 MODEL_DIR = join(expanduser("~"), '.qibullet', '1.4.3')
 DATASET_DIR = join(ROOT_DIR, 'datasets', 'mogaze')
+JSON_CONFIG = join(ROOT_DIR, 'data', 'configuration', "policy_configuration.json")
+
 sys.path.append(ROOT_DIR)
 from gil.lgp.experiment.pipeline import Experiment
 from gil.engine.HumoroLGPEnv import EnvHumoroLGP
@@ -34,7 +36,7 @@ sim_fps = 30 if args.p else 120
 env = EnvHumoroLGP(sim_fps=sim_fps, prediction=args.p, enable_viewer=True, verbose=args.v)
 problem = env.get_problem(segment=segment)
 print(problem)
-env.init_env(segment=segment, problem=problem, human_freq='human-at', traj_init='outer')
+env.init_planner(segment=segment, problem=problem, human_carry=3, trigger_period=10, human_freq='human-at', traj_init='outer')
 #env.humoro_lgp.update_current_symbolic_state()
 #env.humoro_lgp.symbolic_plan()
 #success = env.humoro_lgp.geometric_plan()
@@ -42,17 +44,14 @@ env.init_env(segment=segment, problem=problem, human_freq='human-at', traj_init=
 #     env.humoro_lgp.act()
 # 
 #     env.update_visualization()
-shelf_pos = env.humoro_lgp.workspace._geometric_state["small_shelf"]
-while True:
-    vel = 0.001
-    robot_pos= env.humoro_lgp.workspace.get_robot_geometric_state()
-    command = vel*np.array((shelf_pos-robot_pos))
-    env.step(command)
-    env.update_visualization()
-    #env.humoro_lgp.get_current_observation()
-    #print(env.humoro_lgp.workspace.get_lidar_result2D(numRays=37))
-    #print(env.humoro_lgp.workspace._geometric_state)
-    env.humoro_lgp.workspace.update_symbolic_state()
-    #print(env.humoro_lgp.workspace._symbolic_state)
-    time.sleep(0.01)
-    
+#print(env.humoro_lgp.logic_planner.ground_actions)
+
+env.load_trained_network(JSON_CONFIG)
+
+env.run_gil()
+
+env.init_planner(segment=segment, problem=problem, human_carry=3, trigger_period=10, human_freq='human-at', traj_init='outer')
+env.draw_real_path(gil=True, save_file="abc.png")
+env.draw_real_path(save_file="abcd.png")
+#env.run()
+#env.draw_real_path(gil=True, show=True, human=True, planned=True)
