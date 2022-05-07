@@ -161,4 +161,5 @@ data/caches
 data/policy/saved_models/*.pth
 data/policy/training_log/
 data/figures/*.png
+data/figures/**/*.png
 # End of https://www.toptal.com/developers/gitignore/api/python

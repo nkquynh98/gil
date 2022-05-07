@@ -24,6 +24,7 @@ from gil.data_processing.data_object import Expert_task_data, Expert_motion_data
 from gil.policy.model.MotionNet import *
 from gil.policy.model.TaskNet import *
 from gil.lgp.utils.helpers import *
+import time
 import numpy as np
 
 ROOT_DIR = join(dirname(abspath(__file__)), '../..')
@@ -124,6 +125,12 @@ class EnvHumoroLGP:
         self.dynamic_actual_path = None
         self.dynamic_complete_time = 0
         self.dynamic_reduction_ratio = 0.
+        #GIL plan
+        self.gil_complete_time = 0
+        self.gil_actual_path = []
+        self.gil_finish_percentage = 0
+        
+
     
     def get_experiment_data(self):
         data = {
@@ -148,13 +155,41 @@ class EnvHumoroLGP:
             'dynamic_actual_path': self.dynamic_actual_path,
             'dynamic_complete_time': self.dynamic_complete_time,
             'dynamic_reduction_ratio': self.dynamic_reduction_ratio,
+            'gil_complete_time': self.gil_complete_time,
+            'gil_actual_path': self.gil_actual_path,
+            'gil_finish_percentage': self.gil_finish_percentage,
             'human_path': self.actual_human_path
         }
         return data
 
-    def check_goal_reached(self):
-        return self.humoro_lgp.logic_planner.current_state in self.humoro_lgp.logic_planner.goal_states
+    def check_goal_reached(self, only_objects_goal=False):
+        #print("current state",self.humoro_lgp.logic_planner.current_state  )
+        #print("goal state",self.humoro_lgp.logic_planner.goal_states)
+        current_state = self.humoro_lgp.logic_planner.current_state.copy()
+        goal_state = self.humoro_lgp.logic_planner.goal_states
+        if only_objects_goal:
+            current_state = current_state.difference(frozenset({('agent-avoid-human',), ('agent-free',)}))
+            for obj in current_state:
+                if obj[0]!="on":
+                    current_state = current_state.difference(frozenset({obj}))
+            goal_state = list(goal_state)[0].difference(frozenset({('agent-avoid-human',), ('agent-free',)}))
+            for obj in goal_state:
+                if obj[0]!="on":
+                    goal_state = goal_state.difference(frozenset({obj}))
+            goal_state = {goal_state}
+        return current_state in goal_state
 
+    def check_finish_percentage(self):
+        current_state = self.humoro_lgp.logic_planner.current_state.copy() 
+        total_object = 0.0
+        object_on_table = 0.0
+        for obj in current_state:
+            if obj[0]=="on":
+                current_state = current_state.difference(frozenset({obj}))
+                total_object += 1.0
+                if obj[2]=="table":
+                    object_on_table+=1.0
+        return object_on_table*100/total_object
     def update_visualization(self):
         '''
         This update currently has no playback (backward in time)
@@ -185,7 +220,27 @@ class EnvHumoroLGP:
                     self.handling_circle.origin = current_robot_pos
                     handling_pos = get_point_on_circle(self.z_angle, self.handling_circle)
                     p.resetBasePositionAndOrientation(self.humoro_lgp.player._objects[obj], [*handling_pos, 1], [0, 0, 0, 1])  # TODO: for now attach object at robot origin
-
+    def update_visulization_single_action(self, action:DurativeAction=None):
+        robot = self.humoro_lgp.workspace.get_robot_link_obj()
+        current_robot_pos = self.humoro_lgp.workspace.get_robot_geometric_state()
+        grad = current_robot_pos - self.prev_robot_pos
+        if np.linalg.norm(grad) > 0:  # prevent numerical error
+            z_angle = get_angle(grad, np.array([1, 0]))  # angle of current path gradient with y axis
+            self.z_angle = z_angle if grad[1] > 0 else -z_angle
+            self.q = p.getQuaternionFromEuler([0, 0, self.z_angle])  # + pi/2 due to default orientation of pepper is x-axis
+        self.prev_robot_pos = current_robot_pos
+        p.resetBasePositionAndOrientation(self.humoro_lgp.player._robots[self.robot_frame], [*current_robot_pos, 0], self.q)
+        if action is not None and action.name == 'place':
+            obj, location = action.parameters
+            box = self.humoro_lgp.workspace.kin_tree.nodes[location]['link_obj']
+            x = np.random.uniform(box.origin[0] - box.dim[0] / 2, box.origin[0] + box.dim[0] / 2)  # TODO: should be desired place_pos on location, or add an animation of placing here
+            y = np.random.uniform(box.origin[1] - box.dim[1] / 2, box.origin[1] + box.dim[1] / 2)
+            p.resetBasePositionAndOrientation(self.humoro_lgp.player._objects[obj], [x, y, 0.735], [0, 0, 0, 1])  # currently ignore object orientation
+        elif robot.couplings:
+            for obj in robot.couplings:
+                self.handling_circle.origin = current_robot_pos
+                handling_pos = get_point_on_circle(self.z_angle, self.handling_circle)
+                p.resetBasePositionAndOrientation(self.humoro_lgp.player._objects[obj], [*handling_pos, 1], [0, 0, 0, 1])  # TODO: for now attach object at robot origin                
     def get_current_robot_velocity(self):
         current_robot_pos = self.humoro_lgp.workspace.get_robot_geometric_state()
         velocity = current_robot_pos - self.prev_robot_pos
@@ -246,15 +301,16 @@ class EnvHumoroLGP:
                         self.dynamic_num_failed_plans[self.humoro_lgp.lgp_t] = len(self.humoro_lgp.ranking)
             if self.humoro_lgp.lgp_t % self.humoro_lgp.ratio == 0:
                 # executing current action in the plan
-                if replan:
-                    if success:
-                        self.humoro_lgp.act(sanity_check=False)
+                if self.save_training_data:
+                    self.get_data_for_training(replan=replan,success=success)  
                 else:
-                    self.humoro_lgp.act(sanity_check=False)
+                    if replan:
+                        if success:
+                            self.humoro_lgp.act(sanity_check=False)
+                    else:
+                        self.humoro_lgp.act(sanity_check=False)
                 
                 # reflecting changes in PyBullet
-                if self.save_training_data:
-                    self.get_data_for_training()  
                 self.update_visualization()
   
                 # recording paths
@@ -289,16 +345,19 @@ class EnvHumoroLGP:
             return False
 
 
-    def get_data_for_training(self):
+    def get_data_for_training(self, replan=False,success=False):
         current_action = self.humoro_lgp.get_current_action()
         if current_action is not None:
-            obs_task = self.humoro_lgp.get_observation_for_task()
+            obs_task = self.humoro_lgp.get_observation_for_task(with_robot_holding=True)
             obs_motion = self.humoro_lgp.get_observation_for_motion(current_action)
             command = None
+            if replan:
+                if success:
+                    self.humoro_lgp.act(sanity_check=False)
+            else:
+                self.humoro_lgp.act(sanity_check=False)
             if current_action.name == "move":
                 command = self.get_current_robot_velocity()
-
-            print("command", command)
             temp_motion_data = Expert_motion_data(current_action,obs_task,obs_motion,command)
             self.expert_data.add_motion_data(temp_motion_data)
 
@@ -326,34 +385,37 @@ class EnvHumoroLGP:
 
     def run_gil(self,sleep=False):
         # For recording data
-        self.gil_robot_path = []
+        begin = time.time()
         self.actual_human_path = []
         assert self.is_network_loaded
         max_t = self.humoro_lgp.timeout * self.humoro_lgp.ratio
         while self.humoro_lgp.lgp_t < max_t:
             if self.humoro_lgp.lgp_t % self.humoro_lgp.ratio == 0:
+                self.humoro_lgp.update_workspace()
+                self.humoro_lgp.update_current_symbolic_state()
                 action_name, location, object = self.get_tasknet_output()
                 # action
                 objects = {"location": [location], "object": [object]}
                 predict_action = self.domain.ground_single_action(action_name, objects)
-                print(predict_action)
+                #print(self.humoro_lgp.workspace.symbolic_state)
+                #print(action_name)
+                #print(objects)
                 # Move or pick/place
                 if action_name == "move":
                     command = self.get_motionnet_output(predict_action).numpy()
                     self.humoro_lgp.command_vel(command)
                 else:
-                    self.humoro_lgp.action_map[action_name](predict_action)
+                    self.humoro_lgp.action_map[action_name](predict_action, sanity_check=True)
 
                 #self.humoro_lgp.act(sanity_check=False)
                 
                 # reflecting changes in PyBullet
-                if self.save_training_data:
-                    self.get_data_for_training()  
-                self.update_visualization()
-                self.gil_robot_path.append(self.humoro_lgp.workspace.get_robot_geometric_state())
+                self.update_visulization_single_action(predict_action)
+                self.gil_actual_path.append(self.humoro_lgp.workspace.get_robot_geometric_state())
                 self.actual_human_path.append(self.humoro_lgp.workspace.get_human_geometric_state())
                 
             self.humoro_lgp.update_workspace()
+            self.humoro_lgp.update_current_symbolic_state()
             self.humoro_lgp.visualize()
             self.humoro_lgp.increase_timestep()
             #time.sleep(0.1)
@@ -361,21 +423,29 @@ class EnvHumoroLGP:
                 break
             if sleep:
                 time.sleep(1 / self.humoro_lgp.sim_fps)
+            if self.check_goal_reached(only_objects_goal=True):
+                self.gil_finish_percentage = 100.0
+                self.gil_complete_time = time.time()-begin
+                print(self.gil_finish_percentage)
+                print(self.gil_complete_time)
+                EnvHumoroLGP.logger.info('Task complete successfully!')
+                return True
         self.humoro_lgp.update_workspace()
         self.humoro_lgp.update_current_symbolic_state()
-        if self.check_goal_reached():
-            HumoroDynamicLGP.logger.info('Task complete successfully!')
-            if self.save_training_data:
-                process_recorded_data(self.expert_data)
-            return True
+        self.gil_finish_percentage = self.check_finish_percentage()
+        self.gil_complete_time = time.time()-begin
+        print(self.gil_finish_percentage)
+        print(self.gil_complete_time)
+        if self.check_goal_reached(only_objects_goal=True):
+            EnvHumoroLGP.logger.info('Task complete successfully!')
         else:
-            HumoroDynamicLGP.logger.info('Task failed!')
+            EnvHumoroLGP.logger.info('Task failed!')
             return False
 
 
     def get_tasknet_output(self):
         assert self.is_network_loaded
-        observation = self.humoro_lgp.get_observation_for_task()
+        observation = self.humoro_lgp.get_observation_for_task(with_robot_holding=True)
         input_task = np.concatenate([self.problem_encoded,observation])
         with torch.no_grad():
             action_encoded, location_encoded, object_encoded = self.tasknet(torch.from_numpy(input_task).float())
@@ -394,14 +464,16 @@ class EnvHumoroLGP:
         return command 
 
 
-    def draw_real_path(self, show=False, human=False, gil=False, planned = False, save_file:str = None):
+    def draw_real_path(self, show=False, human=False, gil=False, dynamic_plan = False, single_plan = False, save_file:str = None):
         ax = self.humoro_lgp.workspace.draw_workspace(False)
         if gil:
-            draw_numpy_trajectory(ax,self.gil_robot_path,"b")
+            draw_numpy_trajectory(ax,self.gil_actual_path,"y")
         if human:
             draw_numpy_trajectory(ax,self.actual_human_path,"r")
-        if planned:
-            draw_numpy_trajectory(ax,self.actual_robot_path,"g")
+        if dynamic_plan:
+            draw_numpy_trajectory(ax,self.dynamic_actual_path,"g")
+        if single_plan:
+            draw_numpy_trajectory(ax,self.single_actual_path,"b")            
         if show:
             plt.show()
         if save_file is not None:

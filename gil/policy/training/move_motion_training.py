@@ -16,10 +16,13 @@ from torch.utils.tensorboard import SummaryWriter
 NUM_EPOCHS = 100
 BATCH_SIZE = 100
 DATA_FOLDER = os.path.dirname(os.path.realpath(__file__))+"/../../../data/policy/"
+DATASET_ROOT = os.path.dirname(os.path.realpath(__file__))+"/../../../datasets/gil_dataset/"
 MODEL_NAME = "motionmove"
-SAVED_MODELS_FOLDER = DATA_FOLDER+"saved_models/"
+SAVED_MODELS_FOLDER = DATA_FOLDER+"saved_models/with_holding_encoded/"
 LOGDIR = DATA_FOLDER+"training_log/"+MODEL_NAME+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))+"/"
-DATASET_FOLDER = "/home/nkquynh/gil_ws/gil_hierachial_hmp/hierarchical-hmp/gil/datasets/gil_dataset/set_table/without_human_30_04_2022_20_40_21/motion_data/move"
+DATASET_ROOT = os.path.dirname(os.path.realpath(__file__))+"/../../../datasets/gil_dataset/"
+DATASET_NAME = "set_table/with_holding_encoded_01_05_2022_18_04_35/"
+DATASET_FOLDER = DATASET_ROOT+DATASET_NAME+"motion_data/move"
 TRAIN_TEST_RATE = 0.8
 CHECKPOINT_AFTER = 50
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

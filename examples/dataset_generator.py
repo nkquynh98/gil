@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from gil.engine.GIL_dataset_generator import GILDatasetGenerator
 
-DATASET_NAME = "without_human_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+DATASET_NAME = "with_holding_encoded_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-s', help='The scenario name of the domain, problem file', type=str, default='set_table')
 parser.add_argument('-c', help='number of human carry', type=int, default=3)

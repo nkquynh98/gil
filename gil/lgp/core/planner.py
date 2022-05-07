@@ -78,7 +78,7 @@ class LGP(object):
         # LGP is highly handcrafted for predicate realization in geometric planning. Somehow a data-driven approach is prefered...
         # this algorithm has no timing coordination (a research question for LGP timing coordination in multi-agent scenario)
         waypoints = {robot_frame: [(self.workspace.geometric_state[robot_frame], 0)] for robot_frame in self.workspace.robots}
-        print("Waypoint", waypoints)
+        #print("Waypoint", waypoints)
         for action in act_seqs[plan_idx]:
             if action.name == 'move':
                 robot_frame, location1_frame, location2_frame = action.parameters
@@ -90,7 +90,7 @@ class LGP(object):
                 #Added
                 #self.act(action) 
                 self.act(action, sanity_check=False)  # sanity check is not needed in planning ahead. This is only a projection of final effective space.
-        print("Waypoint end", waypoints)
+        #print("Waypoint end", waypoints)
         for robot_frame in self.workspace.robots:            
             robot = self.workspace.robots[robot_frame]
             # this is a handcrafted code for setting human as an obstacle.
@@ -159,9 +159,6 @@ class LGP(object):
         workspace_symbols = self.workspace.symbolic_state
         assert type(problem_symbols) == frozenset and type(workspace_symbols) == frozenset
         adding_symbols = problem_symbols.difference(workspace_symbols)
-        print("work", workspace_symbols)
-        print("prob", problem_symbols)
-        print("add", adding_symbols)
         for s in adding_symbols:
             if s[0] in self.workspace.DEDUCED_PREDICATES:
                 LGP.logger.warn('Adding symbol %s, which is not deduced by workspace. This can be an inconsistence between initial geometric and symbolic states' % str(s))
@@ -453,17 +450,17 @@ class HumoroLGP(LGP):
         # compute plan costs
         for i, plan in enumerate(self.plans):
             waypoints, waypoint_manifolds = self.get_waypoints(plan)
-            print("Waypoin Manifold:", waypoint_manifolds)
+            #print("Waypoin Manifold:", waypoint_manifolds)
             trajectory = linear_interpolation_waypoints_trajectory(waypoints)
-            print("Waypoints: ", waypoints)
-            print("Trajectory: ", trajectory)
+            #print("Waypoints: ", waypoints)
+            #print("Trajectory: ", trajectory)
             objective = TrajectoryConstraintObjective(dt=1/self.fps, enable_viewer=self.enable_viewer)
             objective.set_problem(workspace=workspace, trajectory=trajectory, waypoint_manifolds=waypoint_manifolds, goal_manifold=waypoint_manifolds[-1][0])
             self.objectives.append(objective)
             self.ranking.append((objective.cost(), i))
         # rank the plans
         self.ranking.sort(key=operator.itemgetter(0))
-        print("Ranking ", self.ranking)
+        #print("Ranking ", self.ranking)
         # optimize the objective according to self.ranking
         for r in self.ranking:
             

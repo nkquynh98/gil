@@ -16,7 +16,7 @@ from gil.lgp.core.dynamic import HumoroDynamicLGP,DynamicLGP
 from gil.lgp.geometry.workspace import HumoroWorkspace
 from gil.lgp.core.planner import LGP, HumoroLGP
 from gil.lgp.experiment.pipeline import Experiment
-from gil.data_processing.data_process import encode_goal, encode_geometric_state
+from gil.data_processing.data_process import encode_goal, encode_geometric_state, encode_robot_holding
 from gil.lgp.logic.action import DurativeAction, Action
 import numpy as np
 
@@ -89,7 +89,7 @@ class HumoroLGPInteractionEnv(HumoroLGP):
         self.workspace.set_robot_geometric_state(current_robot_pose)
         #print(current_robot_pose)
 
-    def get_observation_for_task(self, with_lidar = False):
+    def get_observation_for_task(self, with_lidar = False, with_robot_holding = False):
         geometric_state = self.workspace.geometric_state
         # Encoded goal + current geometry state + lidar(optional) + vector_to_target
         encoded_geometry = encode_geometric_state(geometric_state)
@@ -99,7 +99,10 @@ class HumoroLGPInteractionEnv(HumoroLGP):
         if with_lidar:
             lidar_scan_value = self.workspace.get_lidar_result2D(numRays=10)
             current_observation = np.concatenate([current_observation, lidar_scan_value])
-
+        if with_robot_holding:
+            robot = self.workspace.get_robot_link_obj()
+            holding_object_encoded = encode_robot_holding(list(robot.couplings.keys()))
+            current_observation = np.concatenate([current_observation, holding_object_encoded])
         return current_observation
 
     def get_observation_for_motion(self, action:DurativeAction):

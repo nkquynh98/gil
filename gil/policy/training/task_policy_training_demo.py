@@ -1,4 +1,3 @@
-from gil.policy.training.move_motion_training import MODEL_NAME
 from torch.utils import data
 from gil.data_processing.h5df_dataset_loader import HDF5Dataset
 from gil.policy.model.TaskNet import SetupTableTasknet
@@ -14,18 +13,20 @@ import time
 import os
 NUM_EPOCHS = 100
 BATCH_SIZE = 100
-DATA_FOLDER = os.path.dirname(os.path.realpath(__file__))+"/../../../../data/policy/"
-SAVED_MODELS_FOLDER = DATA_FOLDER+"saved_models/"
+DATA_FOLDER = os.path.dirname(os.path.realpath(__file__))+"/../../../data/policy/"
+SAVED_MODELS_FOLDER = DATA_FOLDER+"saved_models/with_holding_encoded/"
 MODEL_NAME = "tasknet"
 LOGDIR = DATA_FOLDER+"training_log/"+MODEL_NAME+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))+"/"
-DATASET_FOLDER = "/home/nkquynh/gil_ws/gil_hierachial_hmp/hierarchical-hmp/gil/datasets/gil_dataset/set_table/without_human30_04_2022_17_59_40/task_data"
+DATASET_ROOT = os.path.dirname(os.path.realpath(__file__))+"/../../../datasets/gil_dataset/"
+DATASET_NAME = "set_table/with_holding_encoded_01_05_2022_18_04_35/"
+DATASET_FOLDER = DATASET_ROOT+DATASET_NAME+"task_data"
 CHECKPOINT_AFTER = 50
 TRAIN_TEST_RATE = 0.8
 writer = SummaryWriter(log_dir=LOGDIR)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 #Init the tasknet
-tasknet = SetupTableTasknet(goal_encoded_dim = 10, observation_dim=28, action_dim = 3, object_dim = 10, location_dim=3)
+tasknet = SetupTableTasknet(goal_encoded_dim = 10, observation_dim=38, action_dim = 3, object_dim = 10, location_dim=3)
 tasknet.to(device)
 tasknet.apply(initialize_weights)
 

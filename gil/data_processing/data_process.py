@@ -48,7 +48,21 @@ def encode_geometric_state(geometry: dict):
             encoded_value[OFFSET*2+i*2:OFFSET*2+(i+1)*2] = table_pose - geometry[object]
     return encoded_value
     
+def encode_robot_holding(objects):
+    encoded_value = np.zeros(len(OBJECT))
+    if len(objects)>0:
+        for object in objects:
+            index = OBJECT.index(object)
+            encoded_value[index] = 1        
+    return encoded_value    
 
+
+
+def encode_logic_state(logic):
+    pass
+
+def encode_human_holding(logic):
+    pass
 def encode_action(action_to_encode: Action):
     action_encoded = np.zeros((len(ACTION)))
     object_encoded = np.zeros((len(OBJECT)))
@@ -151,6 +165,7 @@ if __name__ == "__main__":
     
     #a_decoded = decode_action(a_encoded[0],a_encoded[1],a_encoded[2])
     #print(a_decoded)
-
+    encode = encode_robot_holding(["plate_blue"])
+    print(encode)
     action_list = {"0_observation": [], "1_command": []} 
     save_to_hdf5(DATA_FOLDER+"/abc.h5", action_list)

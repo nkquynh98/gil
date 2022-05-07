@@ -12,9 +12,10 @@ from gil.lgp.core.dynamic import HumoroDynamicLGP
 from gil.engine.HumoroLGPEnv import EnvHumoroLGP
 from gil.lgp.experiment.pipeline import Experiment
 _path_file = dirname(realpath(__file__))
+
 _domain_dir = join(_path_file, '../../../data', 'scenarios')
 _dataset_dir = join(_path_file, '../../../datasets', 'mogaze')
-_data_dir = join(_path_file, '../../../data', 'experiments')
+_data_dir = join(_path_file, '../../data', 'experiments')
 _figure_dir = join(_path_file, '../../data', 'figures')
 _model_dir = join(expanduser("~"), '.qibullet', '1.4.3')
 robot_model_file = join(_model_dir, 'pepper.urdf')
@@ -28,7 +29,7 @@ class GILDatasetGenerator(object):
         self.verbose = kwargs.get('verbose', False)
         self.task = kwargs.get('task', 'set_table')
         self.data_dir = kwargs.get('data_dir', _data_dir)
-        self.data_name = join(self.data_dir, self.task + str(datetime.now()))
+        self.data_name = join(self.data_dir, self.task + "_"+self.dataset_name+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S")))
         os.makedirs(self.data_dir, exist_ok=True)
         sim_fps = kwargs.get('sim_fps', 120)
         self.prediction = kwargs.get('prediction', False)
@@ -86,8 +87,7 @@ class GILDatasetGenerator(object):
     def save_data(self):
         with open(self.data_name, 'wb') as f:
             pickle.dump(self.segment_data, f)
-    def run_without_human(self):
-        pass
+
     def run(self, gather_data=False):
         for segment, problem in self.segments.items():
             # single plan
@@ -107,20 +107,36 @@ class GILDatasetGenerator(object):
             data['dynamic_success'] = dynamic_success
             self.segment_data[segment] = data
             self.engine.reset_experiment()
-    def run_with_gil(self, json_config_file: str, save_fig = False, tag = ""):
+    def run_with_gil(self, json_config_file: str, dynamic_plan=False, single_plan=False, save_fig = False, tag = ""):
         self.engine.load_trained_network(json_config_file)
         for segment, problem in self.segments.items():
             self.engine.init_planner(segment=segment, problem=problem, 
                             human_carry=self.human_carry, trigger_period=self.trigger_period,
                             human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")
-            self.engine.run_gil()
-            self.engine.init_planner(segment=segment, problem=problem, 
-                                human_carry=self.human_carry, trigger_period=self.trigger_period,
-                                human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")            
-            single_success = self.engine.run(replan=False, sleep=False)
+            gil_success = self.engine.run_gil()
+            if single_plan:
+                self.engine.init_planner(segment=segment, problem=problem, 
+                                    human_carry=self.human_carry, trigger_period=self.trigger_period,
+                                    human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")            
+                single_success = self.engine.run(replan=False, sleep=False)
+            if dynamic_plan:
+                self.engine.init_planner(segment=segment, problem=problem, 
+                                        human_carry=self.human_carry, trigger_period=self.trigger_period,
+                                        human_freq='once', traj_init='nearest', data_tag="dynamic_plan")
+                dynamic_success = self.engine.run(replan=True, sleep=False)
+
+            data = self.engine.get_experiment_data()
+            data['gil_success'] = gil_success
+            if single_plan:
+                data['single_success'] = single_success
+            if dynamic_plan:
+                data['dynamic_success'] = dynamic_success
+            self.segment_data[segment] = data
+            self.engine.reset_experiment()
+            self.save_data()
             if save_fig:
                 file_name = join(_figure_dir,self.dataset_name+"_"+problem.name+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))+ tag + ".png")
-                self.engine.draw_real_path(human=True,gil=True, planned=True, save_file=file_name)
+                self.engine.draw_real_path(human=True,gil=True, dynamic_plan=dynamic_plan, single_plan=single_plan, save_file=file_name)
     @staticmethod
     def get_problem_from_segment(hr, segment, domain, objects, start_agent_symbols, end_agent_symbols):
         '''
