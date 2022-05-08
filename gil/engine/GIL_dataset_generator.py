@@ -19,7 +19,7 @@ _data_dir = join(_path_file, '../../data', 'experiments')
 _figure_dir = join(_path_file, '../../data', 'figures')
 _model_dir = join(expanduser("~"), '.qibullet', '1.4.3')
 robot_model_file = join(_model_dir, 'pepper.urdf')
-
+import time
 
 class GILDatasetGenerator(object):
 
@@ -118,25 +118,31 @@ class GILDatasetGenerator(object):
                 self.engine.init_planner(segment=segment, problem=problem, 
                                     human_carry=self.human_carry, trigger_period=self.trigger_period,
                                     human_freq='human-at', traj_init='outer', save_training_data=False, data_tag="single_plan")            
+                single_begin = time.time()
                 single_success = self.engine.run(replan=False, sleep=False)
+                single_time = time.time()-single_begin
             if dynamic_plan:
                 self.engine.init_planner(segment=segment, problem=problem, 
                                         human_carry=self.human_carry, trigger_period=self.trigger_period,
                                         human_freq='once', traj_init='nearest', data_tag="dynamic_plan")
+                dynamic_begin = time.time()
                 dynamic_success = self.engine.run(replan=True, sleep=False)
-
+                dynamic_time = time.time()-dynamic_begin
             data = self.engine.get_experiment_data()
             data['gil_success'] = gil_success
             if single_plan:
                 data['single_success'] = single_success
+                data['single_time'] = single_time
             if dynamic_plan:
                 data['dynamic_success'] = dynamic_success
+                data['dynamic_time'] = dynamic_time
             self.segment_data[segment] = data
-            self.engine.reset_experiment()
-            self.save_data()
+
             if save_fig:
                 file_name = join(_figure_dir,self.dataset_name+"_"+problem.name+"_"+str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))+ tag + ".png")
                 self.engine.draw_real_path(human=True,gil=True, dynamic_plan=dynamic_plan, single_plan=single_plan, save_file=file_name)
+            self.engine.reset_experiment()
+            self.save_data()
     @staticmethod
     def get_problem_from_segment(hr, segment, domain, objects, start_agent_symbols, end_agent_symbols):
         '''

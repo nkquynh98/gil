@@ -470,9 +470,9 @@ class EnvHumoroLGP:
             draw_numpy_trajectory(ax,self.gil_actual_path,"y")
         if human:
             draw_numpy_trajectory(ax,self.actual_human_path,"r")
-        if dynamic_plan:
+        if dynamic_plan and self.dynamic_actual_path is not None:
             draw_numpy_trajectory(ax,self.dynamic_actual_path,"g")
-        if single_plan:
+        if single_plan and self.single_actual_path is not None:
             draw_numpy_trajectory(ax,self.single_actual_path,"b")            
         if show:
             plt.show()
